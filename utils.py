@@ -13,6 +13,12 @@ from torch.utils.data import Subset
 
 from data_aug import Data_Aug
 
+import logging
+
+logging.basicConfig(filename='result.log', level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
 def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
     if dataset == 'MNIST':
         channel = 1
@@ -210,7 +216,7 @@ def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
     testloader = torch.utils.data.DataLoader(dst_test, batch_size=256, shuffle=False, num_workers=0)
     return channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader
 
-def get_dataset_res(data_path, imb_type = 'exp', dataset = 'CIFAR10', imb_factor = 0.01):
+def get_dataset_res(data_path, imb_type = 'exp', dataset = 'CIFAR10', imb_factor = 0.01, aug_size = 50):
     if dataset == 'CIFAR10':
         channel = 3
         im_size = (32,32)
@@ -248,7 +254,7 @@ def get_dataset_res(data_path, imb_type = 'exp', dataset = 'CIFAR10', imb_factor
         # 创建 Subset 数据集
         cifar10_subset = Subset(cifar10_dataset, subset_indices)
         res_dataset = cifar10_subset
-        # res_dataset = Data_Aug(cifar10_subset).process(5, 500)
+        res_dataset = Data_Aug(cifar10_subset).process(5, aug_size) #default=500
 
     elif dataset == 'CIFAR100':
         channel = 3
@@ -278,7 +284,7 @@ def get_dataset_res(data_path, imb_type = 'exp', dataset = 'CIFAR10', imb_factor
         # 创建 Subset 数据集
         cifar100_subset = Subset(cifar100_dataset, subset_indices)
         # res_dataset = cifar100_subset
-        res_dataset = Data_Aug(cifar100_subset).process(50, 50)
+        res_dataset = Data_Aug(cifar100_subset).process(50, aug_size) # default=50
     else:
         print("not such dataset")
 
@@ -473,6 +479,8 @@ def get_loops(ipc):
         outer_loop, inner_loop = 50, 10
     elif ipc == 100:
         outer_loop, inner_loop = 100, 10
+    elif ipc == 500:
+        outer_loop, inner_loop = 500, 10
     else:
         outer_loop, inner_loop = 0, 0
         exit('loop hyper-parameters are not defined for %d ipc'%ipc)
@@ -543,6 +551,8 @@ def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args):
     time_train = time.time() - start
     loss_test, acc_test = epoch('test', testloader, net, optimizer, criterion, args, aug = False)
     print('%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f' % (get_time(), it_eval, Epoch, int(time_train), loss_train, acc_train, acc_test))
+    logger.info('%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f' % (get_time(), it_eval, Epoch, int(time_train), loss_train, acc_train, acc_test))
+
 
     return net, acc_train, acc_test
 

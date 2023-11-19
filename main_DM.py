@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torchvision.utils import save_image
-from utils import get_loops, get_dataset, get_network, get_eval_pool, evaluate_synset, get_daparam, match_loss, get_time, TensorDataset, epoch, DiffAugment, ParamDiffAug, get_dataset_res
+from utils import get_loops, get_dataset, get_network, get_eval_pool, evaluate_synset, get_daparam, match_loss, get_time, TensorDataset, epoch, DiffAugment, ParamDiffAug, get_dataset_res, logger
 
 
 def main():
@@ -33,6 +33,7 @@ def main():
     parser.add_argument('--partial_condense', type=str, default='F',help='T or F')
     parser.add_argument('--imb_type', type=str, default='exp',help='exp or step')
     parser.add_argument('--imb_factor', type=float, default= 0.01,help='try in (0,1]')
+    parser.add_argument('--aug_size', type=int, default=50, help='augmentation size (only partial)')
 
     args = parser.parse_args()
     args.method = 'DM'
@@ -54,7 +55,7 @@ def main():
     
     
     if args.partial_condense == 'T':
-        dst_train_res = get_dataset_res(args.data_path,imb_type=args.imb_type, imb_factor=args.imb_factor, dataset='CIFAR100')
+        dst_train_res = get_dataset_res(args.data_path,imb_type=args.imb_type, imb_factor=args.imb_factor, aug_size=args.aug_size, dataset='CIFAR100')
         images_all_res = []
         labels_all_res = []
         
@@ -76,6 +77,10 @@ def main():
         print('\n================== Exp %d ==================\n '%exp)
         print('Hyper-parameters: \n', args.__dict__)
         print('Evaluation model pool: ', model_eval_pool)
+
+        logger.info('\n================== Exp %d ==================\n '%exp)
+        logger.info('Hyper-parameters: \n', args.__dict__)
+        logger.info('Evaluation model pool: ', model_eval_pool)
 
         ''' organize the real dataset '''
         images_all = []
@@ -129,6 +134,11 @@ def main():
                     print('DSA augmentation strategy: \n', args.dsa_strategy)
                     print('DSA augmentation parameters: \n', args.dsa_param.__dict__)
 
+                    logger.info('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
+
+                    logger.info('DSA augmentation strategy: \n', args.dsa_strategy)
+                    logger.info('DSA augmentation parameters: \n', args.dsa_param.__dict__)
+
                     accs = []
                     for it_eval in range(args.num_eval):
                         # print("num_class: ", num_classes)
@@ -140,6 +150,7 @@ def main():
                         _, acc_train, acc_test = evaluate_synset(it_eval, net_eval, image_syn_eval, label_syn_eval, testloader, args)
                         accs.append(acc_test)
                     print('Evaluate %d random %s, mean = %.4f std = %.4f\n-------------------------'%(len(accs), model_eval, np.mean(accs), np.std(accs)))
+                    logger.info('Evaluate %d random %s, mean = %.4f std = %.4f\n-------------------------'%(len(accs), model_eval, np.mean(accs), np.std(accs)))
 
                     if it == args.Iteration: # record the final results
                         accs_all_exps[model_eval] += accs
