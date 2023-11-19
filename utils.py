@@ -11,6 +11,8 @@ from networks import MLP, ConvNet, LeNet, AlexNet, AlexNetBN, VGG11, VGG11BN, Re
 from cifar10 import IMBALANCECIFAR10, IMBALANCECIFAR100
 from torch.utils.data import Subset
 
+from data_aug import Data_Aug
+
 def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
     if dataset == 'MNIST':
         channel = 1
@@ -246,6 +248,8 @@ def get_dataset_res(data_path, imb_type = 'exp', dataset = 'CIFAR10', imb_factor
         # 创建 Subset 数据集
         cifar10_subset = Subset(cifar10_dataset, subset_indices)
         res_dataset = cifar10_subset
+        # res_dataset = Data_Aug(cifar10_subset).process(5, 500)
+
     elif dataset == 'CIFAR100':
         channel = 3
         im_size = (32,32)
@@ -273,10 +277,13 @@ def get_dataset_res(data_path, imb_type = 'exp', dataset = 'CIFAR10', imb_factor
 
         # 创建 Subset 数据集
         cifar100_subset = Subset(cifar100_dataset, subset_indices)
-        res_dataset = cifar100_subset
+        # res_dataset = cifar100_subset
+        res_dataset = Data_Aug(cifar100_subset).process(50, 50)
     else:
         print("not such dataset")
+
     return res_dataset
+
 class TensorDataset(Dataset):
     def __init__(self, images, labels): # images: n x c x h x w tensor
         self.images = images.detach().float()
