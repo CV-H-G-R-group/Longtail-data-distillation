@@ -1,0 +1,3 @@
+# python main_DM.py  --dataset CIFAR100-head  --model ConvNet  --ipc 50  --dsa_strategy color_crop_cutout_flip_scale_rotate  --init real  --lr_img 1  --num_exp 1  --num_eval 5 
+python main_DM.py  --dataset CIFAR100-head  --model ConvNet  --ipc 50  --dsa_strategy color_crop_cutout_flip_scale_rotate  --init real  --lr_img 1  --num_exp 1  --num_eval 5 --partial_condense T
+# python main_baseline2.py  --dataset CIFAR10-LT  --model ConvNet --dsa_strategy color_crop_cutout_flip_scale_rotate  --init real  --lr_img 1  --num_exp 1  --num_eval 5

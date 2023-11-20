@@ -1,0 +1,1 @@
+python run.py -data ../data -dataset-name CIFAR100-LT --log-every-n-steps 100 --epochs 100 --out_dim 2048
