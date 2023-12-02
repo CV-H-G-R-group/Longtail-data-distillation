@@ -133,11 +133,7 @@ def main():
                     accs = []
                     for it_eval in range(args.num_eval):
                         # print("num_class: ", num_classes)
-                        if "100" in args.dataset:
-                            output_channel = 100
-                        else:
-                            output_channel = 10
-                        net_eval = get_network(model_eval, channel, output_channel, im_size).to(args.device) # get a random model
+                        net_eval = get_network(model_eval, channel, 100, im_size).to(args.device) # get a random model
                         # net_eval = ResNetSimCLR("resnet50", 10).to(args.device) # get a random model
                         if args.add_pretrain == 'T':
                             checkpoint = torch.load('SimCLR/log/checkpoint_0100.pth.tar')

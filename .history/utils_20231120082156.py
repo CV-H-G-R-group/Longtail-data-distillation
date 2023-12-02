@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 from torchvision import datasets, transforms
 from scipy.ndimage.interpolation import rotate as scipyrotate
-from networks import MLP, ConvNet, LeNet, AlexNet, ResNet18, ResNet18BN_AP, ResNet18BN
+from networks import MLP, ConvNet, LeNet, AlexNet, AlexNetBN, VGG11, VGG11BN, ResNet18, ResNet18BN_AP, ResNet18BN
 from cifar10 import IMBALANCECIFAR10, IMBALANCECIFAR100
 from torch.utils.data import Subset
 
@@ -33,6 +33,17 @@ def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
         dst_train = datasets.FashionMNIST(data_path, train=True, download=True, transform=transform) # no augmentation
         dst_test = datasets.FashionMNIST(data_path, train=False, download=True, transform=transform)
         class_names = dst_train.classes
+
+    elif dataset == 'SVHN':
+        channel = 3
+        im_size = (32, 32)
+        num_classes = 10
+        mean = [0.4377, 0.4438, 0.4728]
+        std = [0.1980, 0.2010, 0.1970]
+        transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
+        dst_train = datasets.SVHN(data_path, split='train', download=True, transform=transform)  # no augmentation
+        dst_test = datasets.SVHN(data_path, split='test', download=True, transform=transform)
+        class_names = [str(c) for c in range(num_classes)]
 
     elif dataset == 'CIFAR10':
         channel = 3
@@ -92,7 +103,7 @@ def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
         std = [0.2023, 0.1994, 0.2010]
        
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
-        dst_train = IMBALANCECIFAR10(root=data_path, imb_type='exp', imb_factor=imb_factor, rand_number=0, train=True, download=True, transform=transform)
+        dst_train = IMBALANCECIFAR10(root=data_path, imb_type='exp', imb_factor=0.01, rand_number=0, train=True, download=True, transform=transform)
         dst_test = datasets.CIFAR10(data_path, train=False, download=True, transform=transform)
         class_names = dst_train.classes
         
@@ -104,7 +115,7 @@ def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
         std = [0.2023, 0.1994, 0.2010]
        
         transform = transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-        dst_train = IMBALANCECIFAR100(root=data_path, imb_type='exp', imb_factor=imb_factor, rand_number=0, train=True, download=True, transform=transform)
+        dst_train = IMBALANCECIFAR100(root=data_path, imb_type='exp', imb_factor=0.01, rand_number=0, train=True, download=True, transform=transform)
 
         dst_test = datasets.CIFAR100(data_path, train=False, download=True, transform=transform)
         class_names = dst_test.classes
@@ -179,7 +190,7 @@ def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
         std = [0.2023, 0.1994, 0.2010]
        
         transform = transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-        dst_test = IMBALANCECIFAR100(root=data_path, imb_type='exp', imb_factor=imb_factor, rand_number=0, train=False, download=True, transform=transform)
+        dst_test = IMBALANCECIFAR100(root=data_path, imb_type='exp', imb_factor=0.01, rand_number=0, train=False, download=True, transform=transform)
         cifar100_dataset = datasets.CIFAR100(data_path, train=True, download=True, transform=transform)
         img_max = 500
         img_num_per_cls = []
@@ -206,7 +217,7 @@ def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
     testloader = torch.utils.data.DataLoader(dst_test, batch_size=256, shuffle=False, num_workers=0)
     return channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader
 
-def get_dataset_res(data_path, dataset = 'CIFAR10-head', imb_factor = 0.01):
+def get_dataset_res(data_path, imb_type = 'exp', dataset = 'CIFAR10-head', imb_factor = 0.01):
     if dataset == 'CIFAR10-head':
         channel = 3
         im_size = (32,32)
@@ -218,19 +229,28 @@ def get_dataset_res(data_path, dataset = 'CIFAR10-head', imb_factor = 0.01):
         
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
         cifar10_dataset = datasets.CIFAR10(data_path, train=True, download=True, transform=transform)
-        
-        img_max = 5000
-        img_num_per_cls = []
-        for cls_idx in range(res_num, cls_num):
-            num = img_max * (imb_factor**(cls_idx / (cls_num - 1.0)))
-            img_num_per_cls.append(int(num))
-            
-        class_index = [i for i in range(res_num, 10)]
-        subset_indices = []
-        for class_idx in class_index:
-            class_indices = [i for i, label in enumerate(cifar10_dataset.targets) if label == class_idx]
-            random_indices = np.random.choice(class_indices, size=img_num_per_cls[class_idx - res_num], replace=False)
-            subset_indices.extend(random_indices.tolist())
+
+        if imb_type == 'step':
+            # 为后 num_class 个类别选择随机的 sample_num 个样本
+            class_index = [i for i in range(res_num, 10)]
+            subset_indices = []
+            for class_idx in class_index:
+                class_indices = [i for i, label in enumerate(cifar10_dataset.targets) if label == class_idx]
+                random_indices = np.random.choice(class_indices, size=sample_num, replace=False)
+                subset_indices.extend(random_indices.tolist())
+        elif imb_type == 'exp':
+            img_max = 5000
+            img_num_per_cls = []
+            for cls_idx in range(res_num, cls_num):
+                num = img_max * (imb_factor**(cls_idx / (cls_num - 1.0)))
+                img_num_per_cls.append(int(num))
+                
+            class_index = [i for i in range(res_num, 10)]
+            subset_indices = []
+            for class_idx in class_index:
+                class_indices = [i for i, label in enumerate(cifar10_dataset.targets) if label == class_idx]
+                random_indices = np.random.choice(class_indices, size=img_num_per_cls[class_idx - res_num], replace=False)
+                subset_indices.extend(random_indices.tolist())
 
         # 创建 Subset 数据集
         cifar10_subset = Subset(cifar10_dataset, subset_indices)
@@ -266,7 +286,6 @@ def get_dataset_res(data_path, dataset = 'CIFAR10-head', imb_factor = 0.01):
     else:
         print("not such dataset")
     return res_dataset
-
 class TensorDataset(Dataset):
     def __init__(self, images, labels): # images: n x c x h x w tensor
         self.images = images.detach().float()
@@ -298,12 +317,27 @@ def get_network(model, channel, num_classes, im_size=(32, 32)):
         net = LeNet(channel=channel, num_classes=num_classes)
     elif model == 'AlexNet':
         net = AlexNet(channel=channel, num_classes=num_classes)
+    elif model == 'AlexNetBN':
+        net = AlexNetBN(channel=channel, num_classes=num_classes)
+    elif model == 'VGG11':
+        net = VGG11( channel=channel, num_classes=num_classes)
+    elif model == 'VGG11BN':
+        net = VGG11BN(channel=channel, num_classes=num_classes)
     elif model == 'ResNet18':
         net = ResNet18(channel=channel, num_classes=num_classes)
     elif model == 'ResNet18BN_AP':
         net = ResNet18BN_AP(channel=channel, num_classes=num_classes)
     elif model == 'ResNet18BN':
         net = ResNet18BN(channel=channel, num_classes=num_classes)
+
+    elif model == 'ConvNetD1':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=1, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
+    elif model == 'ConvNetD2':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=2, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
+    elif model == 'ConvNetD3':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=3, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
+    elif model == 'ConvNetD4':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=4, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
 
     elif model == 'ConvNetW32':
         net = ConvNet(channel=channel, num_classes=num_classes, net_width=32, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
@@ -313,6 +347,36 @@ def get_network(model, channel, num_classes, im_size=(32, 32)):
         net = ConvNet(channel=channel, num_classes=num_classes, net_width=128, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
     elif model == 'ConvNetW256':
         net = ConvNet(channel=channel, num_classes=num_classes, net_width=256, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
+
+    elif model == 'ConvNetAS':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act='sigmoid', net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
+    elif model == 'ConvNetAR':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act='relu', net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
+    elif model == 'ConvNetAL':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act='leakyrelu', net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
+    elif model == 'ConvNetASwish':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act='swish', net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
+    elif model == 'ConvNetASwishBN':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act='swish', net_norm='batchnorm', net_pooling=net_pooling, im_size=im_size)
+
+    elif model == 'ConvNetNN':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm='none', net_pooling=net_pooling, im_size=im_size)
+    elif model == 'ConvNetBN':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm='batchnorm', net_pooling=net_pooling, im_size=im_size)
+    elif model == 'ConvNetLN':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm='layernorm', net_pooling=net_pooling, im_size=im_size)
+    elif model == 'ConvNetIN':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm='instancenorm', net_pooling=net_pooling, im_size=im_size)
+    elif model == 'ConvNetGN':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm='groupnorm', net_pooling=net_pooling, im_size=im_size)
+
+    elif model == 'ConvNetNP':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling='none', im_size=im_size)
+    elif model == 'ConvNetMP':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling='maxpooling', im_size=im_size)
+    elif model == 'ConvNetAP':
+        net = ConvNet(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling='avgpooling', im_size=im_size)
+
     else:
         net = None
         exit('unknown model: %s'%model)

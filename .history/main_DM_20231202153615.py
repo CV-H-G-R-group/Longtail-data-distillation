@@ -133,11 +133,7 @@ def main():
                     accs = []
                     for it_eval in range(args.num_eval):
                         # print("num_class: ", num_classes)
-                        if "100" in args.dataset:
-                            output_channel = 100
-                        else:
-                            output_channel = 10
-                        net_eval = get_network(model_eval, channel, output_channel, im_size).to(args.device) # get a random model
+                        net_eval = get_network(model_eval, channel, 100, im_size).to(args.device) # get a random model
                         # net_eval = ResNetSimCLR("resnet50", 10).to(args.device) # get a random model
                         if args.add_pretrain == 'T':
                             checkpoint = torch.load('SimCLR/log/checkpoint_0100.pth.tar')
@@ -176,21 +172,48 @@ def main():
             loss_avg = 0
 
             ''' update synthetic data '''
-            torch.cuda.empty_cache()
-            loss = torch.tensor(0.0).to(args.device)
-            for c in range(num_classes):
-                img_real = get_images(c, args.batch_real)
-                img_syn = image_syn[c*args.ipc:(c+1)*args.ipc].reshape((args.ipc, channel, im_size[0], im_size[1]))
+            if 'BN' not in args.model: # for ConvNet
+                torch.cuda.empty_cache()
+                loss = torch.tensor(0.0).to(args.device)
+                for c in range(num_classes):
+                    img_real = get_images(c, args.batch_real)
+                    img_syn = image_syn[c*args.ipc:(c+1)*args.ipc].reshape((args.ipc, channel, im_size[0], im_size[1]))
 
-                if args.dsa:
-                    seed = int(time.time() * 1000) % 100000
-                    img_real = DiffAugment(img_real, args.dsa_strategy, seed=seed, param=args.dsa_param)
-                    img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
+                    if args.dsa:
+                        seed = int(time.time() * 1000) % 100000
+                        img_real = DiffAugment(img_real, args.dsa_strategy, seed=seed, param=args.dsa_param)
+                        img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
 
-                output_real = embed(img_real).detach()
-                output_syn = embed(img_syn)
+                    output_real = embed(img_real).detach()
+                    output_syn = embed(img_syn)
 
-                loss += torch.sum((torch.mean(output_real, dim=0) - torch.mean(output_syn, dim=0))**2)
+                    loss += torch.sum((torch.mean(output_real, dim=0) - torch.mean(output_syn, dim=0))**2)
+
+            else: # for ConvNetBN
+                images_real_all = []
+                images_syn_all = []
+                loss = torch.tensor(0.0).to(args.device)
+                for c in range(num_classes):
+                    img_real = get_images(c, args.batch_real)
+                    img_syn = image_syn[c*args.ipc:(c+1)*args.ipc].reshape((args.ipc, channel, im_size[0], im_size[1]))
+
+                    if args.dsa:
+                        seed = int(time.time() * 1000) % 100000
+                        img_real = DiffAugment(img_real, args.dsa_strategy, seed=seed, param=args.dsa_param)
+                        img_syn = DiffAugment(img_syn, args.dsa_strategy, seed=seed, param=args.dsa_param)
+
+                    images_real_all.append(img_real)
+                    images_syn_all.append(img_syn)
+
+                images_real_all = torch.cat(images_real_all, dim=0)
+                images_syn_all = torch.cat(images_syn_all, dim=0)
+
+                output_real = embed(images_real_all).detach()
+                output_syn = embed(images_syn_all)
+
+                loss += torch.sum((torch.mean(output_real.reshape(num_classes, args.batch_real, -1), dim=1) - torch.mean(output_syn.reshape(num_classes, args.ipc, -1), dim=1))**2)
+
+
 
             optimizer_img.zero_grad()
             loss.backward()

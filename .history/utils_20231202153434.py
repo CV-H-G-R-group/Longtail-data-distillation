@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 from torchvision import datasets, transforms
 from scipy.ndimage.interpolation import rotate as scipyrotate
-from networks import MLP, ConvNet, LeNet, AlexNet, ResNet18, ResNet18BN_AP, ResNet18BN
+from networks import MLP, ConvNet, LeNet, AlexNet, AlexNetBN, VGG11, VGG11BN, ResNet18, ResNet18BN_AP, ResNet18BN
 from cifar10 import IMBALANCECIFAR10, IMBALANCECIFAR100
 from torch.utils.data import Subset
 
@@ -92,7 +92,7 @@ def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
         std = [0.2023, 0.1994, 0.2010]
        
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
-        dst_train = IMBALANCECIFAR10(root=data_path, imb_type='exp', imb_factor=imb_factor, rand_number=0, train=True, download=True, transform=transform)
+        dst_train = IMBALANCECIFAR10(root=data_path, imb_type='exp', imb_factor=0.01, rand_number=0, train=True, download=True, transform=transform)
         dst_test = datasets.CIFAR10(data_path, train=False, download=True, transform=transform)
         class_names = dst_train.classes
         
@@ -104,7 +104,7 @@ def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
         std = [0.2023, 0.1994, 0.2010]
        
         transform = transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-        dst_train = IMBALANCECIFAR100(root=data_path, imb_type='exp', imb_factor=imb_factor, rand_number=0, train=True, download=True, transform=transform)
+        dst_train = IMBALANCECIFAR100(root=data_path, imb_type='exp', imb_factor=0.01, rand_number=0, train=True, download=True, transform=transform)
 
         dst_test = datasets.CIFAR100(data_path, train=False, download=True, transform=transform)
         class_names = dst_test.classes
@@ -179,7 +179,7 @@ def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
         std = [0.2023, 0.1994, 0.2010]
        
         transform = transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-        dst_test = IMBALANCECIFAR100(root=data_path, imb_type='exp', imb_factor=imb_factor, rand_number=0, train=False, download=True, transform=transform)
+        dst_test = IMBALANCECIFAR100(root=data_path, imb_type='exp', imb_factor=0.01, rand_number=0, train=False, download=True, transform=transform)
         cifar100_dataset = datasets.CIFAR100(data_path, train=True, download=True, transform=transform)
         img_max = 500
         img_num_per_cls = []
