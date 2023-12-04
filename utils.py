@@ -145,34 +145,27 @@ def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
         cifar10_dataset = datasets.CIFAR10(data_path, train=True, download=True, transform=transform)
 
-        if imb_type == 'step':
-            # 为前 num_class 个类别选择随机的 5000 个样本
-            class_index = [i for i in range(num_classes)]
-            subset_indices = []
-            for class_idx in class_index:
-                class_indices = [i for i, label in enumerate(cifar10_dataset.targets) if label == class_idx]
-                random_indices = np.random.choice(class_indices, size=500, replace=False)
-                subset_indices.extend(random_indices.tolist())
-        elif imb_type == 'exp':
-            img_max = 5000
-            img_num_per_cls = []
-            cls_num = 10
-            for cls_idx in range(num_classes):
-                num = img_max * (imb_factor**(cls_idx / (cls_num - 1.0)))
-                img_num_per_cls.append(int(num))
-                
-            class_index = [i for i in range(num_classes)]
-            subset_indices = []
-            for class_idx in class_index:
-                class_indices = [i for i, label in enumerate(cifar10_dataset.targets) if label == class_idx]
-                random_indices = np.random.choice(class_indices, size=img_num_per_cls[class_idx], replace=False)
-                subset_indices.extend(random_indices.tolist())
+    
+        img_max = 5000
+        img_num_per_cls = []
+        cls_num = 10
+        for cls_idx in range(num_classes):
+            num = img_max * (imb_factor**(cls_idx / (cls_num - 1.0)))
+            img_num_per_cls.append(int(num))
+            
+        class_index = [i for i in range(num_classes)]
+        subset_indices = []
+        for class_idx in class_index:
+            class_indices = [i for i, label in enumerate(cifar10_dataset.targets) if label == class_idx]
+            random_indices = np.random.choice(class_indices, size=img_num_per_cls[class_idx], replace=False)
+            subset_indices.extend(random_indices.tolist())
 
         # 创建 Subset 数据集
         cifar10_subset = Subset(cifar10_dataset, subset_indices)
         dst_train = cifar10_subset
         dst_test = datasets.CIFAR10(data_path, train=False, download=True, transform=transform)
         class_names = dst_test.classes
+        
     elif dataset == 'CIFAR100-head':
         channel = 3
         im_size = (32,32)
@@ -181,7 +174,7 @@ def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
         std = [0.2023, 0.1994, 0.2010]
        
         transform = transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-        dst_test = IMBALANCECIFAR100(root=data_path, imb_type='exp', imb_factor=imb_factor, rand_number=0, train=False, download=True, transform=transform)
+        dst_test = datasets.CIFAR100(data_path, train=False, download=True, transform=transform)
         cifar100_dataset = datasets.CIFAR100(data_path, train=True, download=True, transform=transform)
         img_max = 500
         img_num_per_cls = []
@@ -394,34 +387,6 @@ def match_loss(gw_syn, gw_real, args):
 
 
 
-def get_loops(ipc):
-    # Get the two hyper-parameters of outer-loop and inner-loop.
-    # The following values are empirically good.
-    if ipc == 1:
-        outer_loop, inner_loop = 1, 1
-    elif ipc == 5:
-        outer_loop, inner_loop = 5, 5
-    elif ipc == 10:
-        outer_loop, inner_loop = 10, 50
-    elif ipc == 20:
-        outer_loop, inner_loop = 20, 25
-    elif ipc == 30:
-        outer_loop, inner_loop = 30, 20
-    elif ipc == 40:
-        outer_loop, inner_loop = 40, 15
-    elif ipc == 50:
-        outer_loop, inner_loop = 50, 10
-    elif ipc == 100:
-        outer_loop, inner_loop = 100, 10
-    elif ipc == 500:
-        outer_loop, inner_loop = 500, 10
-    else:
-        outer_loop, inner_loop = 0, 0
-        exit('loop hyper-parameters are not defined for %d ipc'%ipc)
-    return outer_loop, inner_loop
-
-
-
 def epoch(mode, dataloader, net, optimizer, criterion, args, aug):
     loss_avg, acc_avg, num_exp = 0, 0, 0
     net = net.to(args.device)
@@ -482,8 +447,8 @@ def get_class_wise_acc(dataloader, net, args, num_classes, aug):
 
         output = net(img)
         acc = np.sum(np.equal(np.argmax(output.cpu().data.numpy(), axis=-1), lab.cpu().data.numpy()))
-        preds = np.argmax(output.cpu().data.numpy())
-        
+        preds = np.argmax(output.cpu().data.numpy(),axis=1)
+
         for i in range(len(preds)):
             class_correct[lab[i]] += int(preds[i] == lab[i])
             class_total[lab[i]] += 1
@@ -507,6 +472,7 @@ def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args, 
     trainloader = torch.utils.data.DataLoader(dst_train, batch_size=args.batch_train, shuffle=True, num_workers=0)
 
     start = time.time()
+
     for ep in range(Epoch+1):
         loss_train, acc_train = epoch('train', trainloader, net, optimizer, criterion, args, aug = True)
         if ep in lr_schedule:
@@ -520,8 +486,8 @@ def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args, 
     print('%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f' % (get_time(), it_eval, Epoch, int(time_train), loss_train, acc_train, acc_test))
 
     if if_write_csv:
-        data = zip(class_accuracies, class_correct, class_total)
         class_accuracies, class_correct, class_total = get_class_wise_acc(testloader, net, args, num_classes = num_classes, aug = False)
+        data = zip(class_accuracies, class_correct, class_total)
         # 定义要保存的文件路径
         csv_file = 'class_metrics.csv'
 
