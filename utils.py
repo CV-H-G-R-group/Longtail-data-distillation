@@ -518,9 +518,9 @@ def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args, 
     
     
     print('%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f' % (get_time(), it_eval, Epoch, int(time_train), loss_train, acc_train, acc_test))
-    data = zip(class_accuracies, class_correct, class_total)
 
     if if_write_csv:
+        data = zip(class_accuracies, class_correct, class_total)
         class_accuracies, class_correct, class_total = get_class_wise_acc(testloader, net, args, num_classes = num_classes, aug = False)
         # 定义要保存的文件路径
         csv_file = 'class_metrics.csv'

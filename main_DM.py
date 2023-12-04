@@ -55,7 +55,7 @@ def main():
     
     
     if args.partial_condense == 'T':
-        dst_train_res = get_dataset_res(args.data_path,imb_type=args.imb_type, imb_factor=args.imb_factor, dataset=args.dataset)
+        dst_train_res = get_dataset_res(args.data_path, imb_factor=args.imb_factor, dataset=args.dataset)
         images_all_res = []
         labels_all_res = []
         
