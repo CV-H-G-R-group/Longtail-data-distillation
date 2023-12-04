@@ -10,6 +10,8 @@ from scipy.ndimage.interpolation import rotate as scipyrotate
 from networks import MLP, ConvNet, LeNet, AlexNet, ResNet18, ResNet18BN_AP, ResNet18BN
 from cifar10 import IMBALANCECIFAR10, IMBALANCECIFAR100
 from torch.utils.data import Subset
+import csv
+
 
 def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
     if dataset == 'MNIST':
@@ -441,13 +443,13 @@ def epoch(mode, dataloader, net, optimizer, criterion, args, aug):
         n_b = lab.shape[0]
 
         output = net(img)
-        # print(output.shape)
-        # print(lab.shape)
-        # print(np.argmax(output.cpu().data.numpy(), axis=-1).shape)
         
         loss = criterion(output, lab)
         
         acc = np.sum(np.equal(np.argmax(output.cpu().data.numpy(), axis=-1), lab.cpu().data.numpy()))
+        
+        pred = np.argmax(output.cpu().data.numpy())
+        
 
         loss_avg += loss.item()*n_b
         acc_avg += acc
@@ -463,9 +465,35 @@ def epoch(mode, dataloader, net, optimizer, criterion, args, aug):
 
     return loss_avg, acc_avg
 
+def get_class_wise_acc(dataloader, net, args, num_classes, aug):
+    net = net.to(args.device)
+    net.eval()
+    class_correct = np.zeros(num_classes)  # 用于记录每个类别的正确预测数量
+    class_total = np.zeros(num_classes)   
+    
+    for i_batch, datum in enumerate(dataloader):
+        img = datum[0].float().to(args.device)
+        if aug:
+            if args.dsa:
+                img = DiffAugment(img, args.dsa_strategy, param=args.dsa_param)
+            else:
+                img = augment(img, args.dc_aug_param, device=args.device)
+        lab = datum[1].long().to(args.device)
 
+        output = net(img)
+        acc = np.sum(np.equal(np.argmax(output.cpu().data.numpy(), axis=-1), lab.cpu().data.numpy()))
+        preds = np.argmax(output.cpu().data.numpy())
+        
+        for i in range(len(preds)):
+            class_correct[lab[i]] += int(preds[i] == lab[i])
+            class_total[lab[i]] += 1
+        
+        class_accuracies = class_correct / class_total
 
-def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args):
+    return class_accuracies, class_correct, class_total
+ 
+
+def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args, num_classes, if_write_csv = False):
     net = net.to(args.device)
     images_train = images_train.to(args.device)
     labels_train = labels_train.to(args.device)
@@ -487,8 +515,21 @@ def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args):
 
     time_train = time.time() - start
     loss_test, acc_test = epoch('test', testloader, net, optimizer, criterion, args, aug = False)
+    
+    
     print('%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f' % (get_time(), it_eval, Epoch, int(time_train), loss_train, acc_train, acc_test))
+    data = zip(class_accuracies, class_correct, class_total)
 
+    if if_write_csv:
+        class_accuracies, class_correct, class_total = get_class_wise_acc(testloader, net, args, num_classes = num_classes, aug = False)
+        # 定义要保存的文件路径
+        csv_file = 'class_metrics.csv'
+
+        # 写入CSV文件
+        with open(csv_file, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['Class Accuracy', 'Class Correct', 'Class Total'])
+            writer.writerows(data)
     return net, acc_train, acc_test
 
 

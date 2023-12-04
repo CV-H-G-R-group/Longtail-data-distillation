@@ -138,7 +138,6 @@ def main():
                         else:
                             output_channel = 10
                         net_eval = get_network(model_eval, channel, output_channel, im_size).to(args.device) # get a random model
-                        # net_eval = ResNetSimCLR("resnet50", 10).to(args.device) # get a random model
                         if args.add_pretrain == 'T':
                             checkpoint = torch.load('SimCLR/log/checkpoint_0100.pth.tar')
                             net_eval.load_state_dict(checkpoint['state_dict'])
@@ -147,7 +146,10 @@ def main():
                         if args.partial_condense == 'T':
                             image_syn_eval = torch.cat((image_syn_eval, images_all_res), dim=0).to(args.device)
                             label_syn_eval = torch.cat((label_syn_eval, labels_all_res), dim = 0).to(args.device)
-                        _, acc_train, acc_test = evaluate_synset(it_eval, net_eval, image_syn_eval, label_syn_eval, testloader, args)
+                        if it == args.Iteration and it_eval == args.num_eval - 1:
+                            _, acc_train, acc_test = evaluate_synset(it_eval, net_eval, image_syn_eval, label_syn_eval, testloader, args, output_channel, True)
+                        else:
+                            _, acc_train, acc_test = evaluate_synset(it_eval, net_eval, image_syn_eval, label_syn_eval, testloader, args, output_channel, False)
                         accs.append(acc_test)
                     print('Evaluate %d random %s, mean = %.4f std = %.4f\n-------------------------'%(len(accs), model_eval, np.mean(accs), np.std(accs)))
 
