@@ -13,7 +13,7 @@ from torch.utils.data import Subset
 import csv
 
 
-def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
+def get_dataset(dataset, data_path, logger, imb_type = 'exp',imb_factor = 0.01):
     if dataset == 'MNIST':
         channel = 1
         im_size = (28, 28)
@@ -201,7 +201,7 @@ def get_dataset(dataset, data_path, imb_type = 'exp',imb_factor = 0.01):
     testloader = torch.utils.data.DataLoader(dst_test, batch_size=256, shuffle=False, num_workers=0)
     return channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader
 
-def get_dataset_res(data_path, dataset = 'CIFAR10-head', imb_factor = 0.01):
+def get_dataset_res(data_path, dataset, imb_factor, logger):
     if dataset == 'CIFAR10-head':
         channel = 3
         im_size = (32,32)
@@ -259,7 +259,7 @@ def get_dataset_res(data_path, dataset = 'CIFAR10-head', imb_factor = 0.01):
         cifar100_subset = Subset(cifar100_dataset, subset_indices)
         res_dataset = cifar100_subset
     else:
-        print("not such dataset")
+        logger.info("not such dataset")
     return res_dataset
 
 class TensorDataset(Dataset):
@@ -458,7 +458,7 @@ def get_class_wise_acc(dataloader, net, args, num_classes, aug):
     return class_accuracies, class_correct, class_total
  
 
-def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args, num_classes, if_write_csv = False):
+def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args, num_classes, logger, if_write_csv = False):
     net = net.to(args.device)
     images_train = images_train.to(args.device)
     labels_train = labels_train.to(args.device)
@@ -483,7 +483,7 @@ def evaluate_synset(it_eval, net, images_train, labels_train, testloader, args, 
     loss_test, acc_test = epoch('test', testloader, net, optimizer, criterion, args, aug = False)
     
     
-    print('%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f' % (get_time(), it_eval, Epoch, int(time_train), loss_train, acc_train, acc_test))
+    logger.info('%s Evaluate_%02d: epoch = %04d train time = %d s train loss = %.6f train acc = %.4f, test acc = %.4f' % (get_time(), it_eval, Epoch, int(time_train), loss_train, acc_train, acc_test))
 
     if if_write_csv:
         class_accuracies, class_correct, class_total = get_class_wise_acc(testloader, net, args, num_classes = num_classes, aug = False)
@@ -583,7 +583,7 @@ def get_daparam(dataset, model, model_eval, ipc):
     return dc_aug_param
 
 
-def get_eval_pool(eval_mode, model, model_eval):
+def get_eval_pool(eval_mode, model, model_eval, logger):
     if eval_mode == 'M': # multiple architectures
         model_eval_pool = ['MLP', 'ConvNet', 'LeNet', 'AlexNet', 'VGG11', 'ResNet18']
     elif eval_mode == 'B':  # multiple architectures with BatchNorm for DM experiments
@@ -600,7 +600,7 @@ def get_eval_pool(eval_mode, model, model_eval):
         model_eval_pool = ['ConvNetNN', 'ConvNetBN', 'ConvNetLN', 'ConvNetIN', 'ConvNetGN']
     elif eval_mode == 'S': # itself
         if 'BN' in model:
-            print('Attention: Here I will replace BN with IN in evaluation, as the synthetic set is too small to measure BN hyper-parameters.')
+            logger.info('Attention: Here I will replace BN with IN in evaluation, as the synthetic set is too small to measure BN hyper-parameters.')
         model_eval_pool = [model[:model.index('BN')]] if 'BN' in model else [model]
     elif eval_mode == 'SS':  # itself
         model_eval_pool = [model]

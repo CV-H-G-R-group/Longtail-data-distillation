@@ -6,8 +6,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torchvision.utils import save_image
-from utils import get_loops, get_dataset, get_network, get_eval_pool, evaluate_synset, get_daparam, match_loss, get_time, TensorDataset, epoch, DiffAugment, ParamDiffAug, get_dataset_res
+from utils import get_dataset, get_network, get_eval_pool, evaluate_synset, get_daparam, match_loss, get_time, TensorDataset, epoch, DiffAugment, ParamDiffAug, get_dataset_res
 from SimCLR.models.resnet_simclr import ResNetSimCLR
+from logger.log_setup import setup_logs
+
 
 def main():
     torch.cuda.empty_cache()
@@ -41,6 +43,8 @@ def main():
     args.dsa_param = ParamDiffAug()
     args.dsa = False if args.dsa_strategy in ['none', 'None'] else True
 
+    logger = setup_logs('logger', args.dataset)
+
     if not os.path.exists(args.data_path):
         os.mkdir(args.data_path)
 
@@ -48,13 +52,13 @@ def main():
         os.mkdir(args.save_path)
 
     eval_it_pool = np.arange(0, args.Iteration+1, 2000).tolist() if args.eval_mode == 'S' or args.eval_mode == 'SS' else [args.Iteration] # The list of iterations when we evaluate models and record results.
-    print('eval_it_pool: ', eval_it_pool)
-    channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(args.dataset, args.data_path,args.imb_type, args.imb_factor)
-    model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model)
+    logger.info('eval_it_pool: %s', eval_it_pool)
+    channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader = get_dataset(args.dataset, args.data_path, logger, args.imb_type, args.imb_factor)
+    model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model, logger)
     
     
     if args.partial_condense == 'T':
-        dst_train_res = get_dataset_res(args.data_path, imb_factor=args.imb_factor, dataset=args.dataset)
+        dst_train_res = get_dataset_res(args.data_path, imb_factor=args.imb_factor, dataset=args.dataset, logger = logger)
         images_all_res = []
         labels_all_res = []
         
@@ -73,9 +77,9 @@ def main():
 
 
     for exp in range(args.num_exp):
-        print('\n================== Exp %d ==================\n '%exp)
-        print('Hyper-parameters: \n', args.__dict__)
-        print('Evaluation model pool: ', model_eval_pool)
+        logger.info('\n================== Exp %d ==================\n '%exp)
+        logger.info('Hyper-parameters: \n %s', args.__dict__)
+        logger.info('Evaluation model pool: %s', model_eval_pool)
 
         ''' organize the real dataset '''
         images_all = []
@@ -92,14 +96,14 @@ def main():
 
 
         for c in range(num_classes):
-            print('class c = %d: %d real images'%(c, len(indices_class[c])))
+            logger.info('class c = %d: %d real images'%(c, len(indices_class[c])))
 
         def get_images(c, n): # get random n images from class c
             idx_shuffle = np.random.permutation(indices_class[c])[:n]
             return images_all[idx_shuffle]
 
         for ch in range(channel):
-            print('real images channel %d, mean = %.4f, std = %.4f'%(ch, torch.mean(images_all[:, ch]), torch.std(images_all[:, ch])))
+            logger.info('real images channel %d, mean = %.4f, std = %.4f'%(ch, torch.mean(images_all[:, ch]), torch.std(images_all[:, ch])))
 
 
         ''' initialize the synthetic data '''
@@ -107,31 +111,31 @@ def main():
         label_syn = torch.tensor([np.ones(args.ipc)*i for i in range(num_classes)], dtype=torch.long, requires_grad=False, device=args.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
 
         if args.init == 'real':
-            print('initialize synthetic data from random real images')
+            logger.info('initialize synthetic data from random real images')
             for c in range(num_classes):
                 image_syn.data[c*args.ipc:(c+1)*args.ipc] = get_images(c, args.ipc).detach().data
         else:
-            print('initialize synthetic data from random noise')
+            logger.info('initialize synthetic data from random noise')
 
 
         ''' training '''
         optimizer_img = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5) # optimizer_img for synthetic data
         optimizer_img.zero_grad()
-        print('%s training begins'%get_time())
+        logger.info('%s training begins'%get_time())
 
         for it in range(args.Iteration+1):
 
             ''' Evaluate synthetic data '''
             if it in eval_it_pool:
                 for model_eval in model_eval_pool:
-                    print('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
+                    logger.info('-------------------------\nEvaluation\nmodel_train = %s, model_eval = %s, iteration = %d'%(args.model, model_eval, it))
 
-                    print('DSA augmentation strategy: \n', args.dsa_strategy)
-                    print('DSA augmentation parameters: \n', args.dsa_param.__dict__)
+                    logger.info('DSA augmentation strategy: \n %s', args.dsa_strategy)
+                    logger.info('DSA augmentation parameters: \n %s', args.dsa_param.__dict__)
 
                     accs = []
                     for it_eval in range(args.num_eval):
-                        # print("num_class: ", num_classes)
+                        # logger.info("num_class: ", num_classes)
                         if "100" in args.dataset:
                             output_channel = 100
                         else:
@@ -146,11 +150,11 @@ def main():
                             image_syn_eval = torch.cat((image_syn_eval, images_all_res), dim=0).to(args.device)
                             label_syn_eval = torch.cat((label_syn_eval, labels_all_res), dim = 0).to(args.device)
                         if it == args.Iteration and it_eval == args.num_eval - 1:
-                            _, acc_train, acc_test = evaluate_synset(it_eval, net_eval, image_syn_eval, label_syn_eval, testloader, args, output_channel, True)
+                            _, acc_train, acc_test = evaluate_synset(it_eval, net_eval, image_syn_eval, label_syn_eval, testloader, args, output_channel, logger, True)
                         else:
-                            _, acc_train, acc_test = evaluate_synset(it_eval, net_eval, image_syn_eval, label_syn_eval, testloader, args, output_channel, False)
+                            _, acc_train, acc_test = evaluate_synset(it_eval, net_eval, image_syn_eval, label_syn_eval, testloader, args, output_channel, logger, False)
                         accs.append(acc_test)
-                    print('Evaluate %d random %s, mean = %.4f std = %.4f\n-------------------------'%(len(accs), model_eval, np.mean(accs), np.std(accs)))
+                    logger.info('Evaluate %d random %s, mean = %.4f std = %.4f\n-------------------------'%(len(accs), model_eval, np.mean(accs), np.std(accs)))
 
                     if it == args.Iteration: # record the final results
                         accs_all_exps[model_eval] += accs
@@ -202,17 +206,17 @@ def main():
             loss_avg /= (num_classes)
 
             if it%10 == 0:
-                print('%s iter = %05d, loss = %.4f' % (get_time(), it, loss_avg))
+                logger.info('%s iter = %05d, loss = %.4f' % (get_time(), it, loss_avg))
 
             if it == args.Iteration: # only record the final results
                 data_save.append([copy.deepcopy(image_syn.detach().cpu()), copy.deepcopy(label_syn.detach().cpu())])
                 torch.save({'data': data_save, 'accs_all_exps': accs_all_exps, }, os.path.join(args.save_path, 'res_%s_%s_%s_%dipc.pt'%(args.method, args.dataset, args.model, args.ipc)))
 
 
-    print('\n==================== Final Results ====================\n')
+    logger.info('\n==================== Final Results ====================\n')
     for key in model_eval_pool:
         accs = accs_all_exps[key]
-        print('Run %d experiments, train on %s, evaluate %d random %s, mean  = %.2f%%  std = %.2f%%'%(args.num_exp, args.model, len(accs), key, np.mean(accs)*100, np.std(accs)*100))
+        logger.info('Run %d experiments, train on %s, evaluate %d random %s, mean  = %.2f%%  std = %.2f%%'%(args.num_exp, args.model, len(accs), key, np.mean(accs)*100, np.std(accs)*100))
 
 
 
